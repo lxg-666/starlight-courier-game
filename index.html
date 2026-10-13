@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>星光邮差</title>
+  <meta name="description" content="驾驶纸飞机收集星光，避开陨石，点亮沉睡的城市。">
+  <style>
+    :root{color-scheme:dark;--ink:#f7f3ff;--muted:#b5acce;--pink:#ff78b7;--gold:#ffd76a;--cyan:#72e5f4;--panel:rgba(22,17,48,.68)}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#09071d;font-family:ui-rounded,"SF Pro Rounded","Microsoft YaHei",system-ui,sans-serif;color:var(--ink)}
+    body{display:grid;place-items:center;background:radial-gradient(circle at 50% 20%,#30235f 0,#17103b 32%,#09071d 75%)}
+    #game{position:relative;width:min(100vw,540px);height:100dvh;max-height:960px;overflow:hidden;isolation:isolate;box-shadow:0 0 80px #5c42a733}
+    canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+    .hud{position:absolute;z-index:3;inset:0 0 auto;display:grid;grid-template-columns:1fr auto 1fr;align-items:start;padding:max(18px,env(safe-area-inset-top)) 18px 0;pointer-events:none;text-shadow:0 2px 12px #080318}
+    .stat b{display:block;font-size:28px;line-height:1;font-variant-numeric:tabular-nums}.stat small{font-size:11px;letter-spacing:.16em;color:var(--muted)}.stat.right{text-align:right}
+    .combo{margin-top:2px;padding:7px 12px;border:1px solid #ffffff25;border-radius:99px;background:#130d2d99;font-size:12px;color:#ffdff1;opacity:0;transform:translateY(-8px);transition:.25s}.combo.on{opacity:1;transform:none}
+    .brand{position:absolute;z-index:3;top:24%;width:100%;text-align:center;pointer-events:none;transition:.4s}.brand.hide{opacity:0;transform:translateY(-20px)}
+    .eyebrow{font-size:12px;letter-spacing:.42em;color:#b8a7e6;margin-bottom:10px}.brand h1{margin:0;font-size:clamp(43px,11vw,62px);letter-spacing:.08em;font-weight:900;background:linear-gradient(120deg,#fff,#ffd4eb 45%,#a8f4ff);-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 8px 22px #ca68ff44)}
+    .brand p{margin:12px auto 0;color:#c8bedf;font-size:14px;letter-spacing:.1em}
+    .panel{position:absolute;z-index:5;left:50%;bottom:max(38px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(86%,410px);padding:18px;border:1px solid #ffffff24;border-radius:24px;background:linear-gradient(145deg,#211847db,#100c2cdb);box-shadow:0 22px 80px #0008,inset 0 1px #ffffff20;backdrop-filter:blur(16px);text-align:center}
+    .panel.hidden{display:none}.panel h2{margin:0 0 7px;font-size:24px}.panel p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.65}.tips{display:flex;justify-content:center;gap:14px;margin:8px 0 16px;font-size:12px;color:#d9d0ec}.key{padding:2px 7px;border:1px solid #ffffff2b;border-radius:7px;background:#ffffff0d}
+    button{width:100%;border:0;border-radius:15px;padding:14px 18px;background:linear-gradient(100deg,var(--pink),#9e77ff 58%,var(--cyan));color:#160d2e;font:800 15px inherit;letter-spacing:.12em;cursor:pointer;box-shadow:0 10px 28px #b065dd55;transition:.18s}button:hover{transform:translateY(-2px);filter:brightness(1.08)}button:active{transform:translateY(1px)}
+    .mute{position:absolute;z-index:6;right:14px;bottom:14px;width:42px;height:42px;padding:0;border:1px solid #ffffff22;border-radius:50%;background:#171132aa;color:white;box-shadow:none;font-size:18px}
+    .flash{position:absolute;inset:0;z-index:2;pointer-events:none;background:white;opacity:0}.flash.go{animation:flash .24s ease-out}@keyframes flash{from{opacity:.3}to{opacity:0}}
+    .toast{position:absolute;z-index:4;left:50%;top:18%;transform:translate(-50%,-12px);padding:8px 14px;border-radius:99px;background:#fff;color:#241443;font-size:12px;font-weight:900;opacity:0;transition:.25s;white-space:nowrap}.toast.show{opacity:1;transform:translate(-50%,0)}
+    @media(max-height:600px){.brand{top:18%}.panel{bottom:18px;padding:14px}.tips{margin-bottom:11px}}
+  </style>
+</head>
+<body>
+<main id="game" aria-label="星光邮差游戏">
+  <canvas id="canvas"></canvas>
+  <div class="hud"><div class="stat"><small>星光</small><b id="score">0000</b></div><div id="combo" class="combo">连击 × <span>1</span></div><div class="stat right"><small>最佳</small><b id="best">0000</b></div></div>
+  <section id="brand" class="brand"><div class="eyebrow">MOONLIGHT EXPRESS</div><h1>星光邮差</h1><p>今晚，让每一颗星都有归处</p></section>
+  <section id="panel" class="panel"><h2 id="panelTitle">准备起飞</h2><p id="panelText">移动纸飞机接住金色星光，避开滚烫的陨石。<br>连续收集会让分数倍率不断提升。</p><div class="tips"><span><i class="key">← →</i> 移动</span><span><i class="key">拖动</i> 飞行</span><span><i class="key">P</i> 暂停</span></div><button id="start">开始派送</button></section>
+  <button id="mute" class="mute" aria-label="切换声音">♪</button><div id="flash" class="flash"></div><div id="toast" class="toast"></div>
+</main>
+<script>
+(()=>{
+const canvas=document.querySelector('#canvas'),ctx=canvas.getContext('2d'),game=document.querySelector('#game');
+const ui={score:document.querySelector('#score'),best:document.querySelector('#best'),combo:document.querySelector('#combo'),comboN:document.querySelector('#combo span'),panel:document.querySelector('#panel'),title:document.querySelector('#panelTitle'),text:document.querySelector('#panelText'),start:document.querySelector('#start'),brand:document.querySelector('#brand'),mute:document.querySelector('#mute'),flash:document.querySelector('#flash'),toast:document.querySelector('#toast')};
+let W=0,H=0,dpr=1,state='menu',score=0,best=+localStorage.starCourierBest||0,lives=3,combo=0,mult=1,time=0,spawn=0,speed=1,muted=false,keys={},items=[],particles=[],bgStars=[],targetX=0,audio;
+const ship={x:0,y:0,vx:0,w:48,h:34}; ui.best.textContent=String(best).padStart(4,'0');
+function resize(){const r=game.getBoundingClientRect();W=r.width;H=r.height;dpr=Math.min(devicePixelRatio||1,2);canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ship.y=H-110;if(!ship.x)ship.x=W/2;bgStars=Array.from({length:75},(_,i)=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.5+.3,a:Math.random()*.7+.15,s:Math.random()*.22+.04}));}
+addEventListener('resize',resize);resize();
+function tone(freq,dur=.08,type='sine',vol=.05){if(muted)return;audio??=new(window.AudioContext||window.webkitAudioContext)();const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(vol,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+dur);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+dur)}
+function toast(t){ui.toast.textContent=t;ui.toast.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>ui.toast.classList.remove('show'),900)}
+function start(){score=0;lives=3;combo=0;mult=1;time=0;spawn=0;speed=1;items=[];particles=[];ship.x=W/2;targetX=ship.x;state='play';ui.panel.classList.add('hidden');ui.brand.classList.add('hide');updateUI();tone(440,.12,'sine',.08)}
+function end(){state='over';best=Math.max(best,score);localStorage.starCourierBest=best;ui.best.textContent=String(best).padStart(4,'0');ui.title.textContent='今夜的航线完成';ui.text.innerHTML=`你送达了 <b style="color:#ffd76a">${score}</b> 点星光。<br>${score>=best?'新的夜空纪录已写下。':'再飞一次，照亮更远的地方。'}`;ui.start.textContent='再次起飞';ui.panel.classList.remove('hidden');tone(180,.5,'triangle',.08)}
+function updateUI(){ui.score.textContent=String(score).padStart(4,'0');ui.comboN.textContent=mult;ui.combo.classList.toggle('on',combo>=3)}
+function spawnItem(){const bad=Math.random()<Math.min(.18+time/90000,.36),power=!bad&&Math.random()<.06;items.push({x:24+Math.random()*(W-48),y:-30,r:power?14:bad?15:10,vy:(bad?3.1:2.3)*speed,type:power?'moon':bad?'rock':'star',rot:Math.random()*6.28});}
+function burst(x,y,c,n=12){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*5,vy:(Math.random()-.5)*5,life:1,c,r:Math.random()*3+1})}
+function starPath(x,y,r,rot=0){ctx.beginPath();for(let i=0;i<10;i++){const a=rot-Math.PI/2+i*Math.PI/5,rr=i%2?r*.43:r;ctx.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr)}ctx.closePath()}
+function collide(a,b){return Math.abs(a.x-b.x)<a.w/2+b.r*.75&&Math.abs(a.y-b.y)<a.h/2+b.r*.8}
+function update(dt){if(state!=='play')return;time+=dt;speed=1+Math.min(time/45000,1.8);spawn-=dt;if(spawn<=0){spawnItem();spawn=620/Math.sqrt(speed)}
+let dir=(keys.ArrowRight||keys.d?1:0)-(keys.ArrowLeft||keys.a?1:0);if(dir)targetX+=dir*8;ship.vx+=(targetX-ship.x)*.12;ship.vx*=.76;ship.x+=ship.vx;ship.x=Math.max(28,Math.min(W-28,ship.x));
+for(let i=items.length-1;i>=0;i--){const o=items[i];o.y+=o.vy;o.rot+=.035;if(collide(ship,o)){items.splice(i,1);if(o.type==='rock'){lives--;combo=0;mult=1;burst(o.x,o.y,'#ff718f',20);ui.flash.classList.remove('go');void ui.flash.offsetWidth;ui.flash.classList.add('go');tone(95,.22,'sawtooth',.08);toast(`小心！还剩 ${lives} 次机会`);if(lives<=0){end();return}}else{combo++;mult=Math.min(5,1+Math.floor(combo/5));const gain=o.type==='moon'?25*mult:10*mult;score+=gain;burst(o.x,o.y,o.type==='moon'?'#72e5f4':'#ffd76a',o.type==='moon'?26:12);tone(o.type==='moon'?880:540+mult*60,.08,'sine',.055);if(o.type==='moon'){lives=Math.min(3,lives+1);toast('月光信标 · +' + gain)}updateUI()}}else if(o.y>H+40){items.splice(i,1);if(o.type==='star'){combo=0;mult=1;updateUI()}}}
+particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.05;p.life-=.025});particles=particles.filter(p=>p.life>0)}
+function drawBg(){const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#17113b');g.addColorStop(.6,'#0d0928');g.addColorStop(1,'#25143e');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);for(const s of bgStars){s.y+=s.s*speed;if(s.y>H)s.y=0;ctx.globalAlpha=s.a*(.75+.25*Math.sin(time/600+s.x));ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill()}ctx.globalAlpha=1;ctx.fillStyle='#0a071b';ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W;x+=28)ctx.lineTo(x,H-35-Math.sin(x*.08)*12-(x%84===0?45:0));ctx.lineTo(W,H);ctx.fill();ctx.fillStyle='#ffd76a88';for(let x=14;x<W;x+=42)if((x/14)%3!==0)ctx.fillRect(x,H-48-(x%84===0?43:0),3,5)}
+function drawShip(){ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.vx*.015);ctx.shadowBlur=22;ctx.shadowColor='#78e7ff';ctx.fillStyle='#f6f3ff';ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(25,14);ctx.lineTo(4,7);ctx.lineTo(0,18);ctx.lineTo(-4,7);ctx.lineTo(-25,14);ctx.closePath();ctx.fill();ctx.fillStyle='#ff78b7';ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(4,7);ctx.lineTo(0,3);ctx.lineTo(-4,7);ctx.closePath();ctx.fill();ctx.restore()}
+function draw(){drawBg();for(const o of items){ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.rot);if(o.type==='rock'){ctx.shadowBlur=16;ctx.shadowColor='#ff5779';ctx.fillStyle='#7f355b';ctx.beginPath();for(let i=0;i<9;i++){const a=i/9*6.28,r=o.r*(.78+Math.random()*.2);ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}ctx.closePath();ctx.fill();ctx.fillStyle='#ff8094';ctx.beginPath();ctx.arc(-4,-3,3,0,7);ctx.fill()}else{ctx.shadowBlur=o.type==='moon'?30:18;ctx.shadowColor=o.type==='moon'?'#72e5f4':'#ffd76a';ctx.fillStyle=o.type==='moon'?'#d8fbff':'#ffeaa0';starPath(0,0,o.r,o.rot);ctx.fill()}ctx.restore()}for(const p of particles){ctx.globalAlpha=p.life;ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill()}ctx.globalAlpha=1;if(state!=='menu')drawShip();if(state==='pause'){ctx.fillStyle='#080518aa';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='800 28px ui-rounded,system-ui';ctx.fillText('航线暂停',W/2,H/2)}}
+let last=performance.now();function loop(now){const dt=Math.min(32,now-last);last=now;update(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+function point(e){const r=canvas.getBoundingClientRect();targetX=(e.clientX??e.touches?.[0]?.clientX)-r.left}
+canvas.addEventListener('pointerdown',e=>{point(e);canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(e.buttons)point(e)});canvas.addEventListener('pointerup',point);
+addEventListener('keydown',e=>{keys[e.key]=true;if(e.key.toLowerCase()==='p'&&state!=='menu'&&state!=='over'){state=state==='pause'?'play':'pause';last=performance.now()}if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault()});addEventListener('keyup',e=>keys[e.key]=false);
+ui.start.addEventListener('click',start);ui.mute.addEventListener('click',()=>{muted=!muted;ui.mute.textContent=muted?'×':'♪'});
+})();
+</script>
+</body>
+</html>
